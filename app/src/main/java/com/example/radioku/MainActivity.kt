@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
     // ============================================================
     // UNTUK TESTING = 10 DETIK
     // Nanti setelah selesai testing ubah menjadi:
-    // private val interstitialInterval = 10 * 1000L
+    // private val interstitialInterval = 2 * 60 * 1000L
     // ============================================================
 
     private val interstitialInterval = 10 * 1000L
