@@ -11,6 +11,8 @@ import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -60,7 +62,23 @@ class MainActivity : ComponentActivity() {
     private var mediaController: MediaController? = null
 
     private var isPlaying by mutableStateOf(false)
+        // ==============================
+    // INTERSTITIAL AD
+    // ==============================
 
+    private var interstitialAd: InterstitialAd? = null
+
+    // Total waktu radio benar-benar sedang diputar
+    private var playedMillis: Long = 0L
+
+    // Waktu ketika sesi PLAY dimulai
+    private var playStartTime: Long = 0L
+
+    // Apakah sudah mencapai 5 menit
+    private var interstitialReady = false
+
+    // 5 menit dalam milidetik
+    private val interstitialInterval = 5 * 60 * 1000L
     private var selectedRadio by mutableStateOf(
         RadioStation(
             "Memuat radio...",
@@ -81,7 +99,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         MobileAds.initialize(this)
-
+        loadInterstitialAd()
         val sessionToken = SessionToken(
             this,
             android.content.ComponentName(
@@ -130,7 +148,33 @@ class MainActivity : ComponentActivity() {
 
         loadIndonesianRadios()
     }
+    private fun loadInterstitialAd() {
 
+    val adRequest =
+        AdRequest.Builder().build()
+
+    InterstitialAd.load(
+        this,
+        "ca-app-pub-3940256099942544/1033173712",
+        adRequest,
+        object : InterstitialAdLoadCallback() {
+
+            override fun onAdLoaded(
+                ad: InterstitialAd
+            ) {
+
+                interstitialAd = ad
+            }
+
+            override fun onAdFailedToLoad(
+                adError: com.google.android.gms.ads.LoadAdError
+            ) {
+
+                interstitialAd = null
+            }
+        }
+    )
+}
     private fun loadIndonesianRadios() {
 
         Thread {
@@ -246,12 +290,36 @@ class MainActivity : ComponentActivity() {
 
     private fun playRadio(radio: RadioStation) {
 
-        val controller =
-            mediaController ?: return
+    val controller =
+        mediaController ?: return
 
-        if (radio.streamUrl.isBlank()) {
-            return
-        }
+    if (radio.streamUrl.isBlank()) {
+        return
+    }
+
+    val mediaItem =
+        MediaItem.Builder()
+            .setUri(radio.streamUrl)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(radio.name)
+                    .setArtist("RadioKu")
+                    .build()
+            )
+            .build()
+
+    controller.setMediaItem(mediaItem)
+
+    controller.prepare()
+
+    controller.play()
+
+    isPlaying = true
+
+    // Mulai menghitung waktu radio benar-benar diputar
+    playStartTime =
+        System.currentTimeMillis()
+}
 
         val mediaItem =
             MediaItem.Builder()
@@ -275,22 +343,145 @@ class MainActivity : ComponentActivity() {
 
     private fun togglePlayback() {
 
-        val controller =
-            mediaController ?: return
+    val controller =
+        mediaController ?: return
 
-        if (controller.isPlaying) {
+    // ==============================
+    // JIKA SEDANG PLAY → PAUSE
+    // ==============================
 
-            controller.pause()
+    if (controller.isPlaying) {
 
-            isPlaying = false
+        // Hitung waktu yang sudah benar-benar diputar
+        playedMillis +=
+            System.currentTimeMillis() - playStartTime
 
-        } else {
+        controller.pause()
+
+        isPlaying = false
+
+        // Cek apakah sudah mencapai 5 menit
+        if (playedMillis >= interstitialInterval) {
+            interstitialReady = true
+        }
+
+        return
+    }
+
+    // ==============================
+    // JIKA SEDANG PAUSE → PLAY
+    // ==============================
+
+    // Jika belum mencapai 5 menit,
+    // langsung lanjutkan radio
+    if (!interstitialReady) {
+
+        controller.play()
+
+        playStartTime =
+            System.currentTimeMillis()
+
+        isPlaying = true
+
+        return
+    }
+
+    // ==============================
+    // SUDAH 5 MENIT → SIAPKAN IKLAN
+    // ==============================
+
+    val ad = interstitialAd
+
+    // Jika iklan belum berhasil dimuat,
+    // jangan mengganggu pemutaran radio
+    if (ad == null) {
+
+        controller.play()
+
+        playStartTime =
+            System.currentTimeMillis()
+
+        isPlaying = true
+
+        return
+    }
+
+    // ==============================
+    // TAMPILKAN INTERSTITIAL
+    // ==============================
+
+    ad.fullScreenContentCallback =
+    object :
+        com.google.android.gms.ads.FullScreenContentCallback() {
+
+        override fun onAdDismissedFullScreenContent() {
+
+            playedMillis = 0L
+            interstitialReady = false
+
+            loadInterstitialAd()
 
             controller.play()
+
+            playStartTime =
+                System.currentTimeMillis()
+
+            isPlaying = true
+        }
+
+        override fun onAdFailedToShowFullScreenContent(
+            adError: com.google.android.gms.ads.AdError
+        ) {
+
+            loadInterstitialAd()
+
+            controller.play()
+
+            playStartTime =
+                System.currentTimeMillis()
 
             isPlaying = true
         }
     }
+
+interstitialAd = null
+
+ad.show(this)
+
+    // Setelah iklan selesai,
+    // radio akan dilanjutkan
+    
+
+            override fun onAdDismissedFullScreenContent() {
+
+                playedMillis = 0L
+                interstitialReady = false
+
+                loadInterstitialAd()
+
+                controller.play()
+
+                playStartTime =
+                    System.currentTimeMillis()
+
+                isPlaying = true
+            }
+
+            override fun onAdFailedToShowFullScreenContent(
+                adError: com.google.android.gms.ads.AdError
+            ) {
+
+                loadInterstitialAd()
+
+                controller.play()
+
+                playStartTime =
+                    System.currentTimeMillis()
+
+                isPlaying = true
+            }
+        }
+}
 
     override fun onDestroy() {
 
