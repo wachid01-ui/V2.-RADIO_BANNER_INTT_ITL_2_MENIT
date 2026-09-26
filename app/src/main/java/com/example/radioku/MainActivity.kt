@@ -1,84 +1,71 @@
+
 package com.example.radioku
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.DpOffset
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.unit.sp
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
+
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
-import com.google.android.gms.ads.LoadAdError
-import com.example.radioku.ui.theme.RadioKuTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.MoreExecutors
+
 import org.json.JSONArray
+import java.net.HttpURLConnection
 import java.net.URL
+
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 
 data class RadioStation(
     val name: String,
     val streamUrl: String
 )
-
-private const val RADIO_BROWSER_URL =
-    "https://de1.api.radio-browser.info/json/stations/bycountrycodeexact/ID?hidebroken=true&limit=1000"
-
 private const val PLAY_STORE_URL =
     "https://play.google.com/store/apps/details?id=com.example.radioku"
 
@@ -89,31 +76,66 @@ class MainActivity : ComponentActivity() {
 
     private var mediaController: MediaController? = null
 
+    private var isPlaying by mutableStateOf(false)
+
+    // ============================================================
+    // INTERSTITIAL AD
+    // ============================================================
+
     private var interstitialAd: InterstitialAd? = null
+
+    // Total waktu radio benar-benar sedang diputar
+    private var playedMillis: Long = 0L
+
+    // Waktu ketika sesi PLAY dimulai
+    private var playStartTime: Long = 0L
+
+    // Apakah sudah mencapai batas waktu interstitial
+    private var interstitialReady = false
+
+    // ============================================================
+    // UNTUK TESTING = 10 DETIK
+    // Nanti setelah selesai testing ubah menjadi:
+    // private val interstitialInterval = 2 * 60 * 1000L
+    // ============================================================
+
+    private val interstitialInterval = 10 * 1000L
+
+
+    private var selectedRadio by mutableStateOf(
+        RadioStation(
+            "Memuat radio...",
+            ""
+        )
+    )
+
+    private var radioStations by mutableStateOf(
+        listOf<RadioStation>()
+    )
+
+    private var isLoading by mutableStateOf(true)
+
+    private var errorMessage by mutableStateOf("")
+
+    private var searchText by mutableStateOf("")
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // ============================================================
+        // INITIALIZE ADMOB
+        // ============================================================
+
         MobileAds.initialize(this)
 
-        createMediaController()
         loadInterstitialAd()
 
-        setContent {
-            RadioKuTheme {
-                RadioKuApp(
-                    onPlayRadio = { radio ->
-                        playRadio(radio)
-                    },
-                    onPauseRadio = {
-                        pauseRadio()
-                    }
-                )
-            }
-        }
-    }
 
-    private fun createMediaController() {
+        // ============================================================
+        // MEDIA CONTROLLER
+        // ============================================================
+
         val sessionToken = SessionToken(
             this,
             android.content.ComponentName(
@@ -122,141 +144,189 @@ class MainActivity : ComponentActivity() {
             )
         )
 
-        val controllerFuture = MediaController.Builder(
-            this,
-            sessionToken
-        ).buildAsync()
+        val controllerFuture =
+            MediaController.Builder(
+                this,
+                sessionToken
+            ).buildAsync()
 
         controllerFuture.addListener(
             {
-                try {
-                    mediaController = controllerFuture.get()
-                } catch (_: Exception) {
-                }
+                mediaController =
+                    controllerFuture.get()
+
+                isPlaying =
+                    mediaController?.isPlaying == true
             },
-            mainExecutor
+            MoreExecutors.directExecutor()
         )
+
+
+        // ============================================================
+        // COMPOSE UI
+        // ============================================================
+
+        setContent {
+
+            RadioKuApp(
+                radioStations = radioStations,
+                selectedRadio = selectedRadio,
+                isPlaying = isPlaying,
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                searchText = searchText,
+
+                onSearchTextChange = {
+                    searchText = it
+                },
+
+                onRadioSelected = { radio ->
+
+                    selectedRadio = radio
+
+                    playRadio(radio)
+                },
+
+                onPlayPause = {
+
+                    togglePlayback()
+                }
+            )
+        }
+
+
+        // ============================================================
+        // LOAD RADIO INDONESIA
+        // ============================================================
+
+        loadIndonesianRadios()
     }
 
-    private fun playRadio(radio: RadioStation) {
-        val controller = mediaController ?: return
 
-        val mediaItem = MediaItem.fromUri(radio.streamUrl)
-
-        controller.setMediaItem(mediaItem)
-        controller.prepare()
-        controller.play()
-
-        showInterstitialAd()
-    }
-
-    private fun pauseRadio() {
-        mediaController?.pause()
-    }
+    // ============================================================
+    // LOAD INTERSTITIAL AD
+    // ============================================================
 
     private fun loadInterstitialAd() {
-        val adRequest = AdRequest.Builder().build()
+
+        val adRequest =
+            AdRequest.Builder().build()
 
         InterstitialAd.load(
             this,
             "ca-app-pub-3940256099942544/1033173712",
             adRequest,
+
             object : InterstitialAdLoadCallback() {
 
-                override fun onAdLoaded(ad: InterstitialAd) {
+                override fun onAdLoaded(
+                    ad: InterstitialAd
+                ) {
+
                     interstitialAd = ad
                 }
 
-                override fun onAdFailedToLoad(error: LoadAdError) {
+                override fun onAdFailedToLoad(
+                    adError: com.google.android.gms.ads.LoadAdError
+                ) {
+
                     interstitialAd = null
                 }
             }
         )
     }
 
-    private fun showInterstitialAd() {
-        val ad = interstitialAd ?: return
 
-        ad.show(this)
+    // ============================================================
+    // LOAD RADIO INDONESIA
+    // ============================================================
 
-        interstitialAd = null
+    private fun loadIndonesianRadios() {
 
-        loadInterstitialAd()
-    }
+        Thread {
 
-    override fun onDestroy() {
-        mediaController?.release()
-        mediaController = null
+            try {
 
-        super.onDestroy()
-    }
-}
+                val url = URL(
+                    "https://de1.api.radio-browser.info/json/stations/bycountrycodeexact/ID?hidebroken=true&limit=1000"
+                )
 
-@Composable
-fun RadioKuApp(
-    onPlayRadio: (RadioStation) -> Unit,
-    onPauseRadio: () -> Unit
-) {
-    val context = LocalContext.current
+                val connection =
+                    url.openConnection() as HttpURLConnection
 
-    val radioStations = remember {
-        mutableStateListOf<RadioStation>()
-    }
+                connection.requestMethod = "GET"
 
-    var selectedRadio by remember {
-        mutableStateOf<RadioStation?>(null)
-    }
-
-    var isPlaying by remember {
-        mutableStateOf(false)
-    }
-
-    var searchText by remember {
-        mutableStateOf("")
-    }
-
-    var isLoading by remember {
-        mutableStateOf(true)
-    }
-
-    var showMenu by remember {
-        mutableStateOf(false)
-    }
-
-    LaunchedEffect(Unit) {
-        try {
-            val result = withContext(Dispatchers.IO) {
-                val connection = URL(RADIO_BROWSER_URL).openConnection()
                 connection.connectTimeout = 10000
+
                 connection.readTimeout = 15000
 
-                val text = connection.getInputStream()
-                    .bufferedReader()
-                    .use { it.readText() }
+                connection.setRequestProperty(
+                    "User-Agent",
+                    "RadioKu/1.0 Android"
+                )
 
-                val jsonArray = JSONArray(text)
+                val responseCode =
+                    connection.responseCode
 
-                val stations = mutableListOf<RadioStation>()
+                if (
+                    responseCode !=
+                    HttpURLConnection.HTTP_OK
+                ) {
 
-                for (i in 0 until jsonArray.length()) {
-                    val item = jsonArray.getJSONObject(i)
+                    throw Exception(
+                        "Server mengembalikan kode $responseCode"
+                    )
+                }
 
-                    val name = item.optString("name")
-                    val streamUrl = item.optString("url_resolved")
-                        .ifBlank {
-                            item.optString("url")
+                val response =
+                    connection.inputStream
+                        .bufferedReader()
+                        .use {
+                            it.readText()
                         }
 
-                    val lastCheckOk = item.optInt(
-                        "lastcheckok",
-                        0
-                    )
+                connection.disconnect()
+
+
+                val jsonArray =
+                    JSONArray(response)
+
+                val stations =
+                    mutableListOf<RadioStation>()
+
+
+                for (i in 0 until jsonArray.length()) {
+
+                    val station =
+                        jsonArray.getJSONObject(i)
+
+
+                    val name =
+                        station.optString("name")
+
+
+                    val streamUrl =
+                        station.optString(
+                            "url_resolved"
+                        ).ifEmpty {
+
+                            station.optString("url")
+                        }
+
+
+                    val lastCheckOk =
+                        station.optInt(
+                            "lastcheckok",
+                            0
+                        )
+
 
                     if (
                         name.isNotBlank() &&
                         streamUrl.isNotBlank() &&
                         lastCheckOk == 1
                     ) {
+
                         stations.add(
                             RadioStation(
                                 name = name,
@@ -266,403 +336,751 @@ fun RadioKuApp(
                     }
                 }
 
-                stations
+
+                runOnUiThread {
+
+                    if (stations.isNotEmpty()) {
+
+                        radioStations =
+                            stations
+
+                        selectedRadio =
+                            stations.first()
+
+                        isLoading = false
+
+                        errorMessage = ""
+
+                    } else {
+
+                        isLoading = false
+
+                        errorMessage =
+                            "Tidak ada stasiun radio Indonesia yang ditemukan."
+                    }
+                }
+
+            } catch (e: Exception) {
+
+                runOnUiThread {
+
+                    isLoading = false
+
+                    errorMessage =
+                        "Gagal mengambil daftar radio: ${e.message}"
+                }
             }
 
-            radioStations.clear()
-            radioStations.addAll(result)
-
-        } catch (e: Exception) {
-            Toast.makeText(
-                context,
-                "Gagal mengambil daftar radio",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-
-        isLoading = false
+        }.start()
     }
 
-    val filteredStations = radioStations.filter {
-        it.name.contains(
-            searchText,
-            ignoreCase = true
-        )
-    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(12.dp)
+    // ============================================================
+    // PLAY RADIO
+    // ============================================================
+
+    private fun playRadio(
+        radio: RadioStation
     ) {
 
-        Box(
+        val controller =
+            mediaController ?: return
+
+
+        if (radio.streamUrl.isBlank()) {
+            return
+        }
+
+
+        // Jika sebelumnya belum sedang play,
+        // mulai menghitung waktu dari sekarang.
+        //
+        // Jika sudah sedang play dan pindah radio,
+        // waktu yang sudah berjalan TIDAK di-reset.
+
+        if (!controller.isPlaying) {
+
+            playStartTime =
+                System.currentTimeMillis()
+        }
+
+
+        val mediaItem =
+            MediaItem.Builder()
+                .setUri(radio.streamUrl)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(radio.name)
+                        .setArtist("RadioKu")
+                        .build()
+                )
+                .build()
+
+
+        controller.setMediaItem(
+            mediaItem
+        )
+
+        controller.prepare()
+
+        controller.play()
+
+        isPlaying = true
+    }
+
+
+    // ============================================================
+    // PLAY / PAUSE
+    // ============================================================
+
+    private fun togglePlayback() {
+
+    val controller =
+        mediaController ?: return
+
+
+    // ========================================================
+    // JIKA SEDANG PLAY → PAUSE
+    // ========================================================
+
+    if (controller.isPlaying) {
+
+        // Hitung durasi sesi PLAY terakhir
+        if (playStartTime > 0L) {
+
+            playedMillis +=
+                System.currentTimeMillis() -
+                    playStartTime
+        }
+
+        // Hentikan radio
+        controller.pause()
+
+        isPlaying = false
+
+        // Reset waktu mulai sesi
+        playStartTime = 0L
+
+
+        // Cek apakah sudah mencapai
+        // interval interstitial
+        if (
+            playedMillis >=
+            interstitialInterval
+        ) {
+
+            interstitialReady = true
+        }
+
+        return
+    }
+
+
+    // ========================================================
+    // JIKA PAUSE → PLAY
+    // ========================================================
+
+    // --------------------------------------------------------
+    // BELUM MENCAPAI INTERVAL
+    // --------------------------------------------------------
+
+    if (!interstitialReady) {
+
+        controller.play()
+
+        // Mulai menghitung sesi PLAY baru
+        playStartTime =
+            System.currentTimeMillis()
+
+        isPlaying = true
+
+        return
+    }
+
+
+    // ========================================================
+    // SUDAH MENCAPAI INTERVAL
+    // ========================================================
+
+    val ad =
+        interstitialAd
+
+
+    // ========================================================
+    // IKLAN BELUM TERSEDIA
+    // ========================================================
+
+    if (ad == null) {
+
+        // Radio tetap dimainkan
+        controller.play()
+
+        playStartTime =
+            System.currentTimeMillis()
+
+        isPlaying = true
+
+        // Tetap pertahankan status ready.
+        // Jadi jika user PAUSE lalu PLAY lagi,
+        // kita akan mencoba menampilkan iklan lagi
+        // setelah iklan tersedia.
+
+        return
+    }
+
+
+    // ========================================================
+    // IKLAN TERSEDIA
+    // ========================================================
+
+    ad.fullScreenContentCallback =
+        object :
+            com.google.android.gms.ads.FullScreenContentCallback() {
+
+            override fun
+                onAdDismissedFullScreenContent() {
+
+                // ============================================
+                // RESET TIMER
+                // ============================================
+
+                playedMillis = 0L
+
+                interstitialReady = false
+
+                playStartTime = 0L
+
+
+                // ============================================
+                // LOAD INTERSTITIAL BERIKUTNYA
+                // ============================================
+
+                loadInterstitialAd()
+
+
+                // ============================================
+                // LANJUTKAN RADIO
+                // ============================================
+
+                controller.play()
+
+                playStartTime =
+                    System.currentTimeMillis()
+
+                isPlaying = true
+            }
+
+
+            override fun
+                onAdFailedToShowFullScreenContent(
+                    adError:
+                        com.google.android.gms.ads.AdError
+                ) {
+
+                // ============================================
+                // RESET TIMER
+                // ============================================
+
+                playedMillis = 0L
+
+                interstitialReady = false
+
+                playStartTime = 0L
+
+
+                // ============================================
+                // LOAD INTERSTITIAL BERIKUTNYA
+                // ============================================
+
+                loadInterstitialAd()
+
+
+                // ============================================
+                // LANJUTKAN RADIO
+                // ============================================
+
+                controller.play()
+
+                playStartTime =
+                    System.currentTimeMillis()
+
+                isPlaying = true
+            }
+        }
+
+
+    // Kosongkan referensi karena iklan ini
+    // akan digunakan sekarang
+    interstitialAd = null
+
+
+    // Tampilkan iklan
+    ad.show(this)
+}
+
+
+    // ============================================================
+    // DESTROY
+    // ============================================================
+
+    override fun onDestroy() {
+
+        mediaController?.release()
+
+        mediaController = null
+
+        super.onDestroy()
+    }
+}
+
+
+// =================================================================
+// UI RADIOKU
+// =================================================================
+
+@Composable
+fun RadioKuApp(
+    radioStations: List<RadioStation>,
+    selectedRadio: RadioStation,
+    isPlaying: Boolean,
+    isLoading: Boolean,
+    errorMessage: String,
+    searchText: String,
+    onSearchTextChange: (String) -> Unit,
+    onRadioSelected: (RadioStation) -> Unit,
+    onPlayPause: () -> Unit
+) {
+    val context = LocalContext.current
+    MaterialTheme {
+
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(55.dp)
+                .fillMaxSize()
+                .padding(24.dp),
+
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+
+            verticalArrangement =
+                Arrangement.Top
+        ) {
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp)
+            )
+
+
+            // ====================================================
+            // RADIO YANG SEDANG DIPILIH
+            // ====================================================
+
+            Card(
+    modifier =
+        Modifier.fillMaxWidth(),
+
+    shape =
+        RoundedCornerShape(20.dp)
+) {
+
+    Box(
+        modifier =
+            Modifier.fillMaxWidth()
+    ) {
+
+        // ========================================================
+        // TOMBOL MENU ⋮
+        // ========================================================
+
+        var menuExpanded by remember {
+            mutableStateOf(false)
+        }
+
+        IconButton(
+            onClick = {
+                menuExpanded = true
+            },
+
+            modifier =
+                Modifier.align(Alignment.TopEnd)
         ) {
 
             Text(
-                text = "RadioKu",
-                modifier = Modifier.align(Alignment.CenterStart),
-                fontSize = 24.sp,
+                text = "⋮",
+                fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
             )
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-            ) {
-
-                IconButton(
-                    onClick = {
-                        showMenu = true
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Menu"
-                    )
-                }
-
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = {
-                        showMenu = false
-                    },
-                    offset = DpOffset(
-                        x = (-80).dp,
-                        y = (-8).dp
-                    )
-                ) {
-
-                    DropdownMenuItem(
-                        text = {
-                            Text("Rate Us")
-                        },
-                        onClick = {
-                            showMenu = false
-
-                            try {
-                                context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse(PLAY_STORE_URL)
-                                    )
-                                )
-                            } catch (_: Exception) {
-                                Toast.makeText(
-                                    context,
-                                    "Tidak dapat membuka Play Store",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    )
-
-                    DropdownMenuItem(
-                        text = {
-                            Text("Privacy Policy")
-                        },
-                        onClick = {
-                            showMenu = false
-
-                            if (
-                                PRIVACY_POLICY_URL.startsWith("http")
-                            ) {
-                                try {
-                                    context.startActivity(
-                                        Intent(
-                                            Intent.ACTION_VIEW,
-                                            Uri.parse(PRIVACY_POLICY_URL)
-                                        )
-                                    )
-                                } catch (_: Exception) {
-                                    Toast.makeText(
-                                        context,
-                                        "Tidak dapat membuka halaman Privacy Policy",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    "URL Privacy Policy belum diisi",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    )
-                }
-            }
         }
 
-        Spacer(
-            modifier = Modifier.height(8.dp)
-        )
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(
-                defaultElevation = 4.dp
+        // ========================================================
+        // POPUP MENU
+        // ========================================================
+
+        DropdownMenu(
+            expanded = menuExpanded,
+
+            onDismissRequest = {
+                menuExpanded = false
+            }
+        ) {
+
+            // ----------------------------------------------------
+            // RATE US
+            // ----------------------------------------------------
+
+            DropdownMenuItem(
+
+                text = {
+                    Text("⭐ Rate Us")
+                },
+
+                onClick = {
+
+                    menuExpanded = false
+
+                    val intent =
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(PLAY_STORE_URL)
+                        )
+
+                    context.startActivity(intent)
+                }
             )
-        ) {
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
 
-                if (selectedRadio != null) {
+            // ----------------------------------------------------
+            // PRIVACY POLICY
+            // ----------------------------------------------------
 
-                    Text(
-                        text = selectedRadio!!.name,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+            DropdownMenuItem(
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                text = {
+                    Text("🔒 Privacy Policy")
+                },
 
-                    Button(
-                        onClick = {
-                            if (isPlaying) {
-                                onPauseRadio()
-                                isPlaying = false
-                            } else {
-                                selectedRadio?.let {
-                                    onPlayRadio(it)
-                                    isPlaying = true
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors()
-                    ) {
+                onClick = {
 
-                        Icon(
-                            imageVector = if (isPlaying) {
-                                Icons.Default.Pause
-                            } else {
-                                Icons.Default.PlayArrow
-                            },
-                            contentDescription = null
+                    menuExpanded = false
+
+                    val intent =
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(PRIVACY_POLICY_URL)
                         )
 
-                        Spacer(
-                            modifier = Modifier.width(8.dp)
-                        )
-
-                        Text(
-                            text = if (isPlaying) {
-                                "Pause"
-                            } else {
-                                "Play"
-                            }
-                        )
-                    }
-
-                } else {
-
-                    Text(
-                        text = "Pilih radio untuk mulai mendengarkan",
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    context.startActivity(intent)
                 }
-            }
+            )
         }
 
-        Spacer(
-            modifier = Modifier.height(12.dp)
-        )
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
+        // ========================================================
+        // ISI CARD
+        // ========================================================
+
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+
+            horizontalAlignment =
+                Alignment.CenterHorizontally
         ) {
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 12.dp,
-                        vertical = 8.dp
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Text(
+                text = "📻",
+                fontSize = 48.sp
+            )
 
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search",
-                    modifier = Modifier.size(24.dp)
-                )
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp)
+            )
 
-                Spacer(
-                    modifier = Modifier.width(8.dp)
-                )
+            Text(
+                text =
+                    selectedRadio.name,
 
-                BasicTextField(
-                    value = searchText,
-                    onValueChange = {
-                        searchText = it
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { innerTextField ->
+                fontSize =
+                    24.sp,
 
-                        if (searchText.isEmpty()) {
-                            Text(
-                                text = "Cari nama radio...",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                fontWeight =
+                    FontWeight.Bold
+            )
 
-                        innerTextField()
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp)
+            )
+
+            Text(
+                text =
+                    if (isPlaying) {
+
+                        "● Sedang Mengudara"
+
+                    } else {
+
+                        "Siap diputar"
                     }
-                )
-            }
-        }
+            )
 
-        Spacer(
-            modifier = Modifier.height(8.dp)
-        )
+            Spacer(
+                modifier =
+                    Modifier.height(16.dp)
+            )
 
-        HorizontalDivider()
+            Button(
+                onClick =
+                    onPlayPause,
 
-        Spacer(
-            modifier = Modifier.height(4.dp)
-        )
+                modifier =
+                    Modifier.fillMaxWidth(),
 
-        if (isLoading) {
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor =
+                            Color(0xFF2E7D32),
 
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-
-                CircularProgressIndicator()
-            }
-
-        } else if (filteredStations.isEmpty()) {
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                        contentColor =
+                            Color.White
+                    )
             ) {
 
                 Text(
-                    text = "No streaming radio found",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text =
+                        if (isPlaying) {
+
+                            "⏸ PAUSE"
+
+                        } else {
+
+                            "▶ PLAY"
+                        },
+
+                    fontSize =
+                        18.sp
                 )
             }
+        }
+    }
+}
 
-        } else {
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp)
+            )
 
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+
+            Spacer(
+                modifier =
+                    Modifier.height(12.dp)
+            )
+
+
+            // ====================================================
+            // SEARCH
+            // ====================================================
+
+            OutlinedTextField(
+                value =
+                    searchText,
+
+                onValueChange =
+                    onSearchTextChange,
+
+                modifier =
+                    Modifier.fillMaxWidth(),
+
+                label = {
+                    Text("Cari radio")
+                },
+
+                placeholder = {
+                    Text(
+                        "Ketik nama radio..."
+                    )
+                },
+
+                singleLine = true
+            )
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(12.dp)
+            )
+
+
+            // ====================================================
+            // RADIO LIST
+            // ====================================================
+
+            if (isLoading) {
+
+                CircularProgressIndicator()
+
+
+                Spacer(
+                    modifier =
+                        Modifier.height(12.dp)
+                )
+
+
+                Text(
+                    text =
+                        "Memuat daftar radio Indonesia..."
+                )
+
+            } else if (
+                errorMessage.isNotEmpty()
             ) {
 
-                items(
-                    items = filteredStations,
-                    key = {
-                        it.streamUrl
-                    }
-                ) { radio ->
+                Text(
+                    text =
+                        errorMessage
+                )
 
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
+            } else {
 
-                                selectedRadio = radio
+                val filteredRadioStations =
+                    radioStations.filter { radio ->
 
-                                onPlayRadio(radio)
-
-                                isPlaying = true
-                            },
-                        elevation = CardDefaults.cardElevation(
-                            defaultElevation = 2.dp
+                        radio.name.contains(
+                            searchText,
+                            ignoreCase = true
                         )
-                    ) {
+                    }
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
+
+                LazyColumn(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                ) {
+
+                    items(
+                        filteredRadioStations
+                    ) { radio ->
+
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+
+                                        onRadioSelected(
+                                            radio
+                                        )
+                                    }
+                                    .padding(
+                                        vertical = 12.dp,
+                                        horizontal = 8.dp
+                                    )
                         ) {
 
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Play",
-                                modifier = Modifier.size(24.dp)
-                            )
-
-                            Spacer(
-                                modifier = Modifier.width(12.dp)
-                            )
-
                             Text(
-                                text = radio.name,
-                                modifier = Modifier.weight(1f),
-                                fontSize = 16.sp,
-                                fontWeight = if (
-                                    selectedRadio == radio
-                                ) {
-                                    FontWeight.Bold
-                                } else {
-                                    FontWeight.Normal
-                                }
+                                text =
+                                    radio.name,
+
+                                fontSize =
+                                    16.sp,
+
+                                fontWeight =
+                                    if (
+                                        radio ==
+                                        selectedRadio
+                                    ) {
+
+                                        FontWeight.Bold
+
+                                    } else {
+
+                                        FontWeight.Normal
+                                    },
+
+                                color =
+                                    if (
+                                        radio ==
+                                        selectedRadio
+                                    ) {
+
+                                        Color(0xFF2E7D32)
+
+                                    } else {
+
+                                        Color.Unspecified
+                                    }
                             )
+
+
+                            HorizontalDivider()
                         }
                     }
                 }
             }
+
+
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp)
+            )
+
+
+            // ====================================================
+            // BANNER ADMOB
+            // ====================================================
+
+            BannerAdView()
         }
-
-        Spacer(
-            modifier = Modifier.height(8.dp)
-        )
-
-        BannerAdView()
     }
 }
+
+
+// =================================================================
+// BANNER ADMOB
+// =================================================================
 
 @Composable
 fun BannerAdView() {
 
-    val context = LocalContext.current
+    val context =
+        LocalContext.current
+
 
     AndroidView(
+
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .wrapContentSize(),
+
         factory = {
+
             AdView(context).apply {
 
                 setAdSize(
-                    AdSize.BANNER
+                    AdSize
+                        .getCurrentOrientationAnchoredAdaptiveBannerAdSize(
+                            context,
+                            360
+                        )
                 )
 
+
                 adUnitId =
-                    "ca-app-pub-3940256099942544/6300978111"
+                    "ca-app-pub-3940256099942544/9214589741"
+
 
                 loadAd(
                     AdRequest.Builder().build()
                 )
             }
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(50.dp)
+        }
     )
 }
