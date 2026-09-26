@@ -693,38 +693,86 @@ fun RadioKuApp(
         // TOMBOL MENU ⋮
         // ========================================================
 
-        var menuExpanded by remember {
-            mutableStateOf(false)
-        }
+        // ========================================================
+// TOMBOL MENU ⋮ + POPUP
+// ========================================================
 
-        IconButton(
-            onClick = {
-                menuExpanded = true
+var menuExpanded by remember {
+    mutableStateOf(false)
+}
+
+Box(
+    modifier = Modifier
+        .align(Alignment.TopEnd)
+        .padding(top = 4.dp, end = 4.dp)
+) {
+
+    // TOMBOL MENU ⋮
+    IconButton(
+        onClick = {
+            menuExpanded = true
+        }
+    ) {
+
+        Text(
+            text = "⋮",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+
+   // ========================================================
+   // POPUP MENU
+   // ========================================================
+    DropdownMenu(
+        expanded = menuExpanded,
+
+        onDismissRequest = {
+            menuExpanded = false
+        }
+    ) {
+
+        DropdownMenuItem(
+
+            text = {
+                Text("⭐ Rate Us")
             },
 
-            modifier =
-                Modifier.align(Alignment.TopEnd)
-        ) {
+            onClick = {
 
-            Text(
-                text = "⋮",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-
-        // ========================================================
-        // POPUP MENU
-        // ========================================================
-
-        DropdownMenu(
-            expanded = menuExpanded,
-
-            onDismissRequest = {
                 menuExpanded = false
+
+                val intent =
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse(PLAY_STORE_URL)
+                    )
+
+                context.startActivity(intent)
             }
-        ) {
+        )
+
+        DropdownMenuItem(
+
+            text = {
+                Text("🔒 Privacy Policy")
+            },
+
+            onClick = {
+
+                menuExpanded = false
+
+                val intent =
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse(PRIVACY_POLICY_URL)
+                    )
+
+                context.startActivity(intent)
+            }
+        )
+    }
+}
 
             // ----------------------------------------------------
             // RATE US
