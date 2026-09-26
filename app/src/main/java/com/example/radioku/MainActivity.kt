@@ -99,7 +99,7 @@ class MainActivity : ComponentActivity() {
     // private val interstitialInterval = 2 * 60 * 1000L
     // ============================================================
 
-    private val interstitialInterval = 45 * 1000L
+    private val interstitialInterval = 2 * 60 * 1000L
 
 
     private var selectedRadio by mutableStateOf(
