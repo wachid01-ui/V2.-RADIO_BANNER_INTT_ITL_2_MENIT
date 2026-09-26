@@ -33,7 +33,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.viewinterop.AndroidView
@@ -55,12 +56,21 @@ import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 
 data class RadioStation(
     val name: String,
     val streamUrl: String
 )
+private const val PLAY_STORE_URL =
+    "https://play.google.com/store/apps/details?id=com.example.radioku"
 
+private const val PRIVACY_POLICY_URL =
+    "https://MASUKKAN-URL-PRIVACY-POLICY-ANDA-DI-SINI"
 
 class MainActivity : ComponentActivity() {
 
@@ -640,7 +650,7 @@ fun RadioKuApp(
     onRadioSelected: (RadioStation) -> Unit,
     onPlayPause: () -> Unit
 ) {
-
+    val context = LocalContext.current
     MaterialTheme {
 
         Column(
@@ -667,106 +677,198 @@ fun RadioKuApp(
             // ====================================================
 
             Card(
+    modifier =
+        Modifier.fillMaxWidth(),
+
+    shape =
+        RoundedCornerShape(20.dp)
+) {
+
+    Box(
+        modifier =
+            Modifier.fillMaxWidth()
+    ) {
+
+        // ========================================================
+        // TOMBOL MENU ⋮
+        // ========================================================
+
+        var menuExpanded by remember {
+            mutableStateOf(false)
+        }
+
+        IconButton(
+            onClick = {
+                menuExpanded = true
+            },
+
+            modifier =
+                Modifier.align(Alignment.TopEnd)
+        ) {
+
+            Text(
+                text = "⋮",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+
+        // ========================================================
+        // POPUP MENU
+        // ========================================================
+
+        DropdownMenu(
+            expanded = menuExpanded,
+
+            onDismissRequest = {
+                menuExpanded = false
+            }
+        ) {
+
+            // ----------------------------------------------------
+            // RATE US
+            // ----------------------------------------------------
+
+            DropdownMenuItem(
+
+                text = {
+                    Text("⭐ Rate Us")
+                },
+
+                onClick = {
+
+                    menuExpanded = false
+
+                    val intent =
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(PLAY_STORE_URL)
+                        )
+
+                    context.startActivity(intent)
+                }
+            )
+
+
+            // ----------------------------------------------------
+            // PRIVACY POLICY
+            // ----------------------------------------------------
+
+            DropdownMenuItem(
+
+                text = {
+                    Text("🔒 Privacy Policy")
+                },
+
+                onClick = {
+
+                    menuExpanded = false
+
+                    val intent =
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(PRIVACY_POLICY_URL)
+                        )
+
+                    context.startActivity(intent)
+                }
+            )
+        }
+
+
+        // ========================================================
+        // ISI CARD
+        // ========================================================
+
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+
+            horizontalAlignment =
+                Alignment.CenterHorizontally
+        ) {
+
+            Text(
+                text = "📻",
+                fontSize = 48.sp
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp)
+            )
+
+            Text(
+                text =
+                    selectedRadio.name,
+
+                fontSize =
+                    24.sp,
+
+                fontWeight =
+                    FontWeight.Bold
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp)
+            )
+
+            Text(
+                text =
+                    if (isPlaying) {
+
+                        "● Sedang Mengudara"
+
+                    } else {
+
+                        "Siap diputar"
+                    }
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(16.dp)
+            )
+
+            Button(
+                onClick =
+                    onPlayPause,
+
                 modifier =
                     Modifier.fillMaxWidth(),
 
-                shape =
-                    RoundedCornerShape(20.dp)
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor =
+                            Color(0xFF2E7D32),
+
+                        contentColor =
+                            Color.White
+                    )
             ) {
 
-                Column(
-                    modifier =
-                        Modifier.padding(20.dp),
+                Text(
+                    text =
+                        if (isPlaying) {
 
-                    horizontalAlignment =
-                        Alignment.CenterHorizontally
-                ) {
+                            "⏸ PAUSE"
 
+                        } else {
 
-                    Text(
-                        text = "📻",
-                        fontSize = 48.sp
-                    )
+                            "▶ PLAY"
+                        },
 
-
-                    Spacer(
-                        modifier =
-                            Modifier.height(8.dp)
-                    )
-
-
-                    Text(
-                        text =
-                            selectedRadio.name,
-
-                        fontSize =
-                            24.sp,
-
-                        fontWeight =
-                            FontWeight.Bold
-                    )
-
-
-                    Spacer(
-                        modifier =
-                            Modifier.height(8.dp)
-                    )
-
-
-                    Text(
-                        text =
-                            if (isPlaying) {
-
-                                "● Sedang Mengudara"
-
-                            } else {
-
-                                "Siap diputar"
-                            }
-                    )
-
-
-                    Spacer(
-                        modifier =
-                            Modifier.height(16.dp)
-                    )
-
-
-                    Button(
-                        onClick =
-                            onPlayPause,
-
-                        modifier =
-                            Modifier.fillMaxWidth(),
-
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor =
-                                    Color(0xFF2E7D32),
-
-                                contentColor =
-                                    Color.White
-                            )
-                    ) {
-
-                        Text(
-                            text =
-                                if (isPlaying) {
-
-                                    "⏸ PAUSE"
-
-                                } else {
-
-                                    "▶ PLAY"
-                                },
-
-                            fontSize =
-                                18.sp
-                        )
-                    }
-                }
+                    fontSize =
+                        18.sp
+                )
             }
-
+        }
+    }
+}
 
             Spacer(
                 modifier =
