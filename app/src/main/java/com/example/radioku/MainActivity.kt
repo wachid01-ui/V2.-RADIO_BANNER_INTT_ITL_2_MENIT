@@ -425,147 +425,188 @@ class MainActivity : ComponentActivity() {
 
     private fun togglePlayback() {
 
-        val controller =
-            mediaController ?: return
+    val controller =
+        mediaController ?: return
 
 
-        // ========================================================
-        // JIKA SEDANG PLAY → PAUSE
-        // ========================================================
+    // ========================================================
+    // JIKA SEDANG PLAY → PAUSE
+    // ========================================================
 
-        if (controller.isPlaying) {
+    if (controller.isPlaying) {
 
-            // Tambahkan waktu sesi PLAY terakhir
+        // Hitung durasi sesi PLAY terakhir
+        if (playStartTime > 0L) {
+
             playedMillis +=
                 System.currentTimeMillis() -
                     playStartTime
-
-
-            controller.pause()
-
-            isPlaying = false
-
-            playStartTime = 0L
-
-
-            // Cek apakah sudah mencapai
-            // 10 detik untuk testing
-            if (
-                playedMillis >=
-                interstitialInterval
-            ) {
-
-                interstitialReady = true
-            }
-
-            return
         }
 
+        // Hentikan radio
+        controller.pause()
 
-        // ========================================================
-        // JIKA SEDANG PAUSE → PLAY
-        // ========================================================
+        isPlaying = false
 
-        // Belum mencapai batas waktu
-        // → langsung PLAY tanpa iklan
+        // Reset waktu mulai sesi
+        playStartTime = 0L
 
-        if (!interstitialReady) {
 
-            controller.play()
+        // Cek apakah sudah mencapai
+        // interval interstitial
+        if (
+            playedMillis >=
+            interstitialInterval
+        ) {
 
-            playStartTime =
-                System.currentTimeMillis()
-
-            isPlaying = true
-
-            return
+            interstitialReady = true
         }
 
-
-        // ========================================================
-        // SUDAH MENCAPAI BATAS WAKTU
-        // ========================================================
-
-        val ad =
-            interstitialAd
-
-
-        // ========================================================
-        // IKLAN BELUM TERSEDIA
-        // ========================================================
-
-        if (ad == null) {
-
-            controller.play()
-
-            playStartTime =
-                System.currentTimeMillis()
-
-            isPlaying = true
-
-            return
-        }
-
-
-        // ========================================================
-        // IKLAN TERSEDIA
-        // ========================================================
-
-        // Callback HARUS dipasang sebelum ad.show()
-
-        ad.fullScreenContentCallback =
-            object :
-                com.google.android.gms.ads.FullScreenContentCallback() {
-
-                override fun
-                    onAdDismissedFullScreenContent() {
-
-                    // Reset timer setelah iklan selesai
-                    playedMillis = 0L
-
-                    interstitialReady = false
-
-                    // Siapkan iklan berikutnya
-                    loadInterstitialAd()
-
-                    // Lanjutkan radio
-                    controller.play()
-
-                    playStartTime =
-                        System.currentTimeMillis()
-
-                    isPlaying = true
-                }
-
-
-                override fun
-                    onAdFailedToShowFullScreenContent(
-                        adError:
-                            com.google.android.gms.ads.AdError
-                    ) {
-
-                    // Coba muat iklan berikutnya
-                    loadInterstitialAd()
-
-                    // Radio tetap dilanjutkan
-                    controller.play()
-
-                    playStartTime =
-                        System.currentTimeMillis()
-
-                    isPlaying = true
-                }
-            }
-
-
-        // Kosongkan referensi karena iklan ini
-        // akan digunakan sekarang
-        interstitialAd = null
-
-
-        // Tampilkan iklan
-        ad.show(this)
+        return
     }
+
+
+    // ========================================================
+    // JIKA PAUSE → PLAY
+    // ========================================================
+
+    // --------------------------------------------------------
+    // BELUM MENCAPAI INTERVAL
+    // --------------------------------------------------------
+
+    if (!interstitialReady) {
+
+        controller.play()
+
+        // Mulai menghitung sesi PLAY baru
+        playStartTime =
+            System.currentTimeMillis()
+
+        isPlaying = true
+
+        return
+    }
+
+
+    // ========================================================
+    // SUDAH MENCAPAI INTERVAL
+    // ========================================================
+
+    val ad =
+        interstitialAd
+
+
+    // ========================================================
+    // IKLAN BELUM TERSEDIA
+    // ========================================================
+
+    if (ad == null) {
+
+        // Radio tetap dimainkan
+        controller.play()
+
+        playStartTime =
+            System.currentTimeMillis()
+
+        isPlaying = true
+
+        // Tetap pertahankan status ready.
+        // Jadi jika user PAUSE lalu PLAY lagi,
+        // kita akan mencoba menampilkan iklan lagi
+        // setelah iklan tersedia.
+
+        return
+    }
+
+
+    // ========================================================
+    // IKLAN TERSEDIA
+    // ========================================================
+
+    ad.fullScreenContentCallback =
+        object :
+            com.google.android.gms.ads.FullScreenContentCallback() {
+
+            override fun
+                onAdDismissedFullScreenContent() {
+
+                // ============================================
+                // RESET TIMER
+                // ============================================
+
+                playedMillis = 0L
+
+                interstitialReady = false
+
+                playStartTime = 0L
+
+
+                // ============================================
+                // LOAD INTERSTITIAL BERIKUTNYA
+                // ============================================
+
+                loadInterstitialAd()
+
+
+                // ============================================
+                // LANJUTKAN RADIO
+                // ============================================
+
+                controller.play()
+
+                playStartTime =
+                    System.currentTimeMillis()
+
+                isPlaying = true
+            }
+
+
+            override fun
+                onAdFailedToShowFullScreenContent(
+                    adError:
+                        com.google.android.gms.ads.AdError
+                ) {
+
+                // ============================================
+                // RESET TIMER
+                // ============================================
+
+                playedMillis = 0L
+
+                interstitialReady = false
+
+                playStartTime = 0L
+
+
+                // ============================================
+                // LOAD INTERSTITIAL BERIKUTNYA
+                // ============================================
+
+                loadInterstitialAd()
+
+
+                // ============================================
+                // LANJUTKAN RADIO
+                // ============================================
+
+                controller.play()
+
+                playStartTime =
+                    System.currentTimeMillis()
+
+                isPlaying = true
+            }
+        }
+
+
+    // Kosongkan referensi karena iklan ini
+    // akan digunakan sekarang
+    interstitialAd = null
+
+
+    // Tampilkan iklan
+    ad.show(this)
+}
 
 
     // ============================================================
