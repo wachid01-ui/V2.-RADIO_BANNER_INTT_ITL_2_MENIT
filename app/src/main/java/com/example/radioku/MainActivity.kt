@@ -690,92 +690,77 @@ fun RadioKuApp(
     ) {
 
         // ========================================================
-        // TOMBOL MENU ⋮
-        // ========================================================
+// TOMBOL MENU ⋮ + POPUP
+// ========================================================
 
-        var menuExpanded by remember {
-            mutableStateOf(false)
+Box(
+    modifier = Modifier
+        .align(Alignment.TopEnd)
+        .wrapContentSize()
+) {
+
+    IconButton(
+        onClick = {
+            menuExpanded = true
         }
+    ) {
+        Text(
+            text = "⋮",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
 
-        IconButton(
-            onClick = {
-                menuExpanded = true
+    DropdownMenu(
+        expanded = menuExpanded,
+        onDismissRequest = {
+            menuExpanded = false
+        }
+    ) {
+
+        // ----------------------------------------------------
+        // RATE US
+        // ----------------------------------------------------
+
+        DropdownMenuItem(
+            text = {
+                Text("⭐ Rate Us")
             },
+            onClick = {
 
-            modifier =
-                Modifier.align(Alignment.TopEnd)
-        ) {
-
-            Text(
-                text = "⋮",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-
-        // ========================================================
-        // POPUP MENU
-        // ========================================================
-
-        DropdownMenu(
-            expanded = menuExpanded,
-
-            onDismissRequest = {
                 menuExpanded = false
+
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(PLAY_STORE_URL)
+                )
+
+                context.startActivity(intent)
             }
-        ) {
+        )
 
-            // ----------------------------------------------------
-            // RATE US
-            // ----------------------------------------------------
+        // ----------------------------------------------------
+        // PRIVACY POLICY
+        // ----------------------------------------------------
 
-            DropdownMenuItem(
+        DropdownMenuItem(
+            text = {
+                Text("🔒 Privacy Policy")
+            },
+            onClick = {
 
-                text = {
-                    Text("⭐ Rate Us")
-                },
+                menuExpanded = false
 
-                onClick = {
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(PRIVACY_POLICY_URL)
+                )
 
-                    menuExpanded = false
-
-                    val intent =
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse(PLAY_STORE_URL)
-                        )
-
-                    context.startActivity(intent)
-                }
-            )
-
-
-            // ----------------------------------------------------
-            // PRIVACY POLICY
-            // ----------------------------------------------------
-
-            DropdownMenuItem(
-
-                text = {
-                    Text("🔒 Privacy Policy")
-                },
-
-                onClick = {
-
-                    menuExpanded = false
-
-                    val intent =
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse(PRIVACY_POLICY_URL)
-                        )
-
-                    context.startActivity(intent)
-                }
-            )
-        }
-
+                context.startActivity(intent)
+            }
+        )
+    }
+}
 
         // ========================================================
         // ISI CARD
